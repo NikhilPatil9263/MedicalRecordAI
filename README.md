@@ -584,19 +584,6 @@ Retrieval
 Generation
 ```
 
-## ⚠️ Limitations
-
-This is a controlled development/MVP system.
-
-- No production EHR integration
-- No production deployment included
-- Uses synthetic/sample records for demonstration
-- No clinical validation
-- Not intended for autonomous diagnosis
-- Not intended for autonomous treatment recommendations
-- OCR and document extraction quality depends on source quality
-- Complex multi-patient documents require careful validation
-- Local Tesseract installation is environment-dependent
 
 ## 🔮 Future Improvements
 
