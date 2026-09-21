@@ -1,0 +1,274 @@
+import mimetypes
+import os
+import shutil
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
+
+from app.auth.dependencies import get_current_user
+from app.db.audit_service import create_audit_log
+from app.db.database import SessionLocal
+from app.ingestion.ingestion_service import process_document
+from app.models.document import Document
+from app.models.patient import Patient
+from app.models.user import User
+from app.schemas.document import DocumentResponse, DocumentUploadResponse
+
+
+router = APIRouter(
+    prefix="/patient",
+    tags=["Patient Documents"],
+)
+
+UPLOAD_DIR = "data/uploads"
+
+
+# ============================================================
+# Upload Medical Document
+# ============================================================
+
+@router.post(
+    "/documents/upload",
+    response_model=DocumentUploadResponse,
+)
+def upload_document(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != "patient":
+        raise HTTPException(
+            status_code=403,
+            detail="Patient access required",
+        )
+
+    db = SessionLocal()
+
+    try:
+        patient = (
+            db.query(Patient)
+            .filter(Patient.user_id == current_user.id)
+            .first()
+        )
+
+        if not patient:
+            raise HTTPException(
+                status_code=404,
+                detail="Patient profile not found",
+            )
+
+        if not file.filename:
+            raise HTTPException(
+                status_code=400,
+                detail="A file is required",
+            )
+
+        patient_dir = os.path.join(
+            UPLOAD_DIR,
+            str(patient.id),
+        )
+
+        os.makedirs(patient_dir, exist_ok=True)
+
+        safe_filename = Path(file.filename).name
+        file_path = os.path.join(
+            patient_dir,
+            safe_filename,
+        )
+
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        document = Document(
+            patient_id=patient.id,
+            file_name=safe_filename,
+            file_path=file_path,
+            file_type=file.content_type or "application/octet-stream",
+            processing_status="processing",
+        )
+
+        db.add(document)
+        db.commit()
+        db.refresh(document)
+
+        try:
+            process_document(
+                file_path=file_path,
+                patient_id=patient.id,
+                patient_name=current_user.name,
+                document_id=document.id,
+            )
+
+            document.processing_status = "processed"
+            db.commit()
+
+        except Exception:
+            document.processing_status = "failed"
+            db.commit()
+            raise
+
+        create_audit_log(
+            user_id=current_user.id,
+            action="UPLOAD_MEDICAL_DOCUMENT",
+            resource_type="document",
+            resource_id=document.id,
+        )
+
+        return {
+            "document_id": document.id,
+            "file_name": document.file_name,
+            "processing_status": document.processing_status,
+        }
+
+    except HTTPException:
+        db.rollback()
+        raise
+
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Document processing failed: {exc}",
+        )
+
+    finally:
+        db.close()
+
+
+# ============================================================
+# List Patient Documents
+# ============================================================
+
+@router.get(
+    "/documents",
+    response_model=list[DocumentResponse],
+)
+def get_patient_documents(
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != "patient":
+        raise HTTPException(
+            status_code=403,
+            detail="Patient access required",
+        )
+
+    db = SessionLocal()
+
+    try:
+        patient = (
+            db.query(Patient)
+            .filter(Patient.user_id == current_user.id)
+            .first()
+        )
+
+        if not patient:
+            raise HTTPException(
+                status_code=404,
+                detail="Patient profile not found",
+            )
+
+        documents = (
+            db.query(Document)
+            .filter(Document.patient_id == patient.id)
+            .order_by(Document.uploaded_at.desc())
+            .all()
+        )
+
+        return [
+            {
+                "document_id": document.id,
+                "file_name": document.file_name,
+                "file_type": document.file_type,
+                "extraction_method": document.extraction_method,
+                "processing_status": document.processing_status,
+                "uploaded_at": (
+                    document.uploaded_at.isoformat()
+                    if document.uploaded_at
+                    else None
+                ),
+            }
+            for document in documents
+        ]
+
+    finally:
+        db.close()
+
+
+# ============================================================
+# View Patient Document
+# ============================================================
+
+@router.get(
+    "/documents/{document_id}/view",
+)
+def view_patient_document(
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != "patient":
+        raise HTTPException(
+            status_code=403,
+            detail="Patient access required",
+        )
+
+    db = SessionLocal()
+
+    try:
+        patient = (
+            db.query(Patient)
+            .filter(Patient.user_id == current_user.id)
+            .first()
+        )
+
+        if not patient:
+            raise HTTPException(
+                status_code=404,
+                detail="Patient profile not found",
+            )
+
+        document = (
+            db.query(Document)
+            .filter(
+                Document.id == document_id,
+                Document.patient_id == patient.id,
+            )
+            .first()
+        )
+
+        if not document:
+            raise HTTPException(
+                status_code=404,
+                detail="Document not found",
+            )
+
+        file_path = Path(document.file_path)
+
+        if not file_path.exists() or not file_path.is_file():
+            raise HTTPException(
+                status_code=404,
+                detail="Document file not found",
+            )
+
+        media_type = document.file_type
+
+        if not media_type or "/" not in media_type:
+            media_type = mimetypes.guess_type(
+                document.file_name
+            )[0] or "application/octet-stream"
+
+        create_audit_log(
+            user_id=current_user.id,
+            action="VIEW_MEDICAL_DOCUMENT",
+            resource_type="document",
+            resource_id=document.id,
+        )
+
+        return FileResponse(
+            path=str(file_path),
+            media_type=media_type,
+            filename=document.file_name,
+            content_disposition_type="inline",
+        )
+
+    finally:
+        db.close()

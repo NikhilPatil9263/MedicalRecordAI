@@ -1,0 +1,48 @@
+# Environment
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# Generated/local data
+data/
+uploads/
+
+# Old frontend backup
+frontend_backup/
+
+# Local test scripts
+test.py
+test_gemini_vlm.py
+test_ocr.py
+test_vlm.py
+
+# Local project notes
+info.txt
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary
+*.tmp
+*.temp
+
+# Local Tesseract installation
+tools/tesseract/
