@@ -27,7 +27,6 @@ Patients upload historical medical documents. Administrators manage users, docto
 - [API Endpoints](#-api-endpoints)
 - [Example Doctor Query](#-example-doctor-query)
 - [Design Decisions](#-design-decisions)
-- [Limitations](#-limitations)
 - [Future Improvements](#-future-improvements)
 - [Disclaimer](#-disclaimer)
 
