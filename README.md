@@ -130,7 +130,7 @@ The client does not choose the patient ID for medical-record retrieval.
 
 ![Patient Dashboard](docs/screenshots/patient_dashboard.png)
 
-### 🛠️ Admin Console
+### 🛠️ Admin
 
 ![Admin Dashboard](docs/screenshots/admin_dashboard.png)
 
