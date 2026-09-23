@@ -124,19 +124,19 @@ The client does not choose the patient ID for medical-record retrieval.
 
 ### 🔐 Login
 
-![MedicalRecordAI Login](docs/screenshots/login.png)
+![MedicalRecordAI Login](docs/screenshots/Login_page.png)
 
 ### 👤 Patient Dashboard
 
-![Patient Dashboard](docs/screenshots/patient-dashboard.png)
+![Patient Dashboard](docs/screenshots/patient_dashboard.png)
 
 ### 🛠️ Admin Console
 
-![Admin Dashboard](docs/screenshots/admin-dashboard.png)
+![Admin Dashboard](docs/screenshots/Screenshot%202026-09-23%20111231.png)
 
 ### 👨‍⚕️ Doctor Dashboard
 
-![Doctor Dashboard](docs/screenshots/doctor-dashboard.png)
+![Doctor Dashboard](docs/screenshots/doctor_output.png)
 
 ## 🏗️ System Architecture
 
