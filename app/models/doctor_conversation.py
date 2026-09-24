@@ -5,8 +5,8 @@ from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
 from app.db.database import Base
 
 
-class Appointment(Base):
-    __tablename__ = "appointments"
+class DoctorConversation(Base):
+    __tablename__ = "doctor_conversations"
 
     id = Column(
         Integer,
@@ -28,19 +28,28 @@ class Appointment(Base):
         index=True
     )
 
-    appointment_date = Column(
-        DateTime,
-        nullable=False
+    appointment_id = Column(
+        Integer,
+        ForeignKey("appointments.id"),
+        nullable=False,
+        index=True
     )
 
-    status = Column(
+    title = Column(
         String,
         nullable=False,
-        default="scheduled"
+        default="New Conversation"
     )
 
     created_at = Column(
         DateTime,
         default=datetime.utcnow,
+        nullable=False
+    )
+
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
         nullable=False
     )

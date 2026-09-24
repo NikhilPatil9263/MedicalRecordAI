@@ -24,12 +24,6 @@ function clearSession() {
   localStorage.removeItem("role");
 }
 
-/**
- * Core request helper.
- * - Attaches Authorization header automatically when a token exists.
- * - Never logs the token.
- * - On 401, clears the session.
- */
 async function request(
   path,
   { method = "GET", body, isFormData = false } = {}
@@ -54,10 +48,10 @@ async function request(
       body: isFormData
         ? body
         : body !== undefined
-          ? JSON.stringify(body)
-          : undefined,
+        ? JSON.stringify(body)
+        : undefined,
     });
-  } catch (networkErr) {
+  } catch {
     throw new ApiError(
       "Unable to reach the server. Please check your connection and that the backend is running.",
       0,
@@ -66,8 +60,8 @@ async function request(
   }
 
   let data = null;
-
-  const contentType = response.headers.get("content-type") || "";
+  const contentType =
+    response.headers.get("content-type") || "";
 
   if (contentType.includes("application/json")) {
     data = await response.json().catch(() => null);
@@ -88,23 +82,22 @@ async function request(
   return data;
 }
 
-// ============================================================
+
+// =========================================================
 // AUTH
-// ============================================================
+// =========================================================
 
 export async function login(email, password) {
   return request("/auth/login", {
     method: "POST",
-    body: {
-      email,
-      password,
-    },
+    body: { email, password },
   });
 }
 
-// ============================================================
+
+// =========================================================
 // PATIENT
-// ============================================================
+// =========================================================
 
 export async function getPatientDocuments() {
   return request("/patient/documents");
@@ -146,27 +139,30 @@ export async function uploadPatientDocument(file, onProgress) {
 
       try {
         data = JSON.parse(xhr.responseText);
-      } catch (e) {
+      } catch {
         data = null;
       }
 
-      if (xhr.status >= 200 && xhr.status < 300) {
+      if (
+        xhr.status >= 200 &&
+        xhr.status < 300
+      ) {
         resolve(data);
-        return;
-      }
+      } else {
+        if (xhr.status === 401) {
+          clearSession();
+        }
 
-      if (xhr.status === 401) {
-        clearSession();
+        reject(
+          new ApiError(
+            (data &&
+              (data.detail || data.message)) ||
+              `Upload failed with status ${xhr.status}`,
+            xhr.status,
+            data
+          )
+        );
       }
-
-      reject(
-        new ApiError(
-          (data && (data.detail || data.message)) ||
-            `Upload failed with status ${xhr.status}`,
-          xhr.status,
-          data
-        )
-      );
     };
 
     xhr.onerror = () => {
@@ -183,9 +179,9 @@ export async function uploadPatientDocument(file, onProgress) {
   });
 }
 
-// ============================================================
-// PATIENT DOCUMENT VIEWING
-// ============================================================
+export async function getPatientAppointments() {
+  return request("/patient/appointments");
+}
 
 export async function viewPatientDocument(documentId) {
   const token = getToken();
@@ -193,7 +189,6 @@ export async function viewPatientDocument(documentId) {
   const response = await fetch(
     `${BASE_URL}/patient/documents/${documentId}/view`,
     {
-      method: "GET",
       headers: token
         ? {
             Authorization: `Bearer ${token}`,
@@ -203,56 +198,84 @@ export async function viewPatientDocument(documentId) {
   );
 
   if (!response.ok) {
-    let data = null;
-
-    const contentType =
-      response.headers.get("content-type") || "";
-
-    if (contentType.includes("application/json")) {
-      data = await response.json().catch(() => null);
-    }
-
     if (response.status === 401) {
       clearSession();
     }
 
     throw new ApiError(
-      (data && (data.detail || data.message)) ||
-        `Unable to open document (${response.status})`,
-      response.status,
-      data
+      `Unable to open document (${response.status})`,
+      response.status
     );
   }
 
   const blob = await response.blob();
-  const blobUrl = URL.createObjectURL(blob);
+  const url = URL.createObjectURL(blob);
 
-  const newWindow = window.open(
-    blobUrl,
+  window.open(
+    url,
     "_blank",
     "noopener,noreferrer"
   );
 
-  if (!newWindow) {
-    URL.revokeObjectURL(blobUrl);
+  setTimeout(
+    () => URL.revokeObjectURL(url),
+    60000
+  );
+}
+
+
+// =========================================================
+// ADMIN DOCUMENTS
+// =========================================================
+
+export async function getAdminDocuments() {
+  return request("/admin/documents");
+}
+
+export async function viewAdminDocument(documentId) {
+  const token = getToken();
+
+  const response = await fetch(
+    `${BASE_URL}/admin/documents/${documentId}/view`,
+    {
+      headers: token
+        ? {
+            Authorization: `Bearer ${token}`,
+          }
+        : {},
+    }
+  );
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      clearSession();
+    }
 
     throw new ApiError(
-      "Please allow pop-ups to view this document.",
-      0,
-      null
+      `Unable to open document (${response.status})`,
+      response.status
     );
   }
 
-  setTimeout(() => {
-    URL.revokeObjectURL(blobUrl);
-  }, 60000);
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
 
-  return true;
+  window.open(
+    url,
+    "_blank",
+    "noopener,noreferrer"
+  );
+
+  setTimeout(
+    () => URL.revokeObjectURL(url),
+    60000
+  );
 }
 
-// ============================================================
+
+// =========================================================
 // DOCTOR
-// ============================================================
+// =========================================================
 
 export async function getDoctorAppointments() {
   return request("/doctor/appointments");
@@ -262,8 +285,9 @@ export async function askDoctorQuery(
   appointmentId,
   query
 ) {
-  // patient_id is intentionally NOT sent.
-  // Backend derives it from the verified appointment.
+  // Only appointment_id and query are sent.
+  // The backend derives patient_id from the
+  // verified appointment.
   return request("/doctor/query", {
     method: "POST",
     body: {
@@ -273,9 +297,114 @@ export async function askDoctorQuery(
   });
 }
 
-// ============================================================
+
+// =========================================================
+// DOCTOR PROFILE
+// =========================================================
+
+export async function getDoctorProfile() {
+  return request("/doctor/profile");
+}
+
+export async function updateDoctorProfile(payload) {
+  return request("/doctor/profile", {
+    method: "PUT",
+    body: payload,
+  });
+}
+
+
+// =========================================================
+// DOCTOR PATIENT SUMMARY
+// =========================================================
+
+export async function getDoctorPatientSummary(
+  appointmentId
+) {
+  return request(
+    `/doctor/appointments/${appointmentId}/summary`
+  );
+}
+
+
+// =========================================================
+// DOCTOR CONVERSATIONS
+// =========================================================
+
+export async function getDoctorPatients() {
+  return request("/doctor/patients");
+}
+
+export async function createDoctorConversation(
+  appointmentId,
+  title = "New Conversation"
+) {
+  return request("/doctor/conversations", {
+    method: "POST",
+    body: {
+      appointment_id: appointmentId,
+      title,
+    },
+  });
+}
+
+export async function getDoctorConversation(
+  conversationId
+) {
+  return request(
+    `/doctor/conversations/${conversationId}`
+  );
+}
+
+export async function askDoctorConversation(
+  conversationId,
+  query
+) {
+  return request(
+    `/doctor/conversations/${conversationId}/query`,
+    {
+      method: "POST",
+      body: {
+        query,
+      },
+    }
+  );
+}
+
+export async function deleteDoctorConversation(
+  conversationId
+) {
+  return request(
+    `/doctor/conversations/${conversationId}`,
+    {
+      method: "DELETE",
+    }
+  );
+}
+
+// =========================================================
+// DOCTOR <-> PATIENT LIVE CHAT
+// =========================================================
+
+export async function createLiveChatSession(appointmentId) {
+  return request("/chat/session", {
+    method: "POST",
+    body: {
+      appointment_id: appointmentId,
+    },
+  });
+}
+
+export async function getLiveChatMessages(appointmentId) {
+  return request(
+    `/chat/${appointmentId}/messages`
+  );
+}
+
+
+// =========================================================
 // ADMIN
-// ============================================================
+// =========================================================
 
 export async function getAdminUsers() {
   return request("/admin/users");
@@ -318,17 +447,10 @@ export async function getAdminAuditLogs() {
   return request("/admin/audit-logs");
 }
 
-// ============================================================
-// ADMIN DOCUMENTS
-// ============================================================
 
-export async function getAdminDocuments() {
-  return request("/admin/documents");
-}
-
-// ============================================================
+// =========================================================
 // EXPORTS
-// ============================================================
+// =========================================================
 
 export {
   getToken,
