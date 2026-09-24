@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar.jsx";
-
 import {
   getAdminUsers,
   getAdminDoctors,
@@ -9,17 +8,13 @@ import {
   createAdminPatient,
   getAdminAppointments,
   getAdminAuditLogs,
-  getAdminDocuments,
 } from "../services/api";
-
-const API_BASE_URL = "http://127.0.0.1:8000";
 
 const SECTIONS = [
   { key: "dashboard", label: "Dashboard", icon: "⌂", group: "OVERVIEW" },
   { key: "users", label: "Users", icon: "♙", group: "PEOPLE" },
   { key: "doctors", label: "Doctors", icon: "⚕", group: "PEOPLE" },
   { key: "patients", label: "Patients", icon: "♧", group: "PEOPLE" },
-  { key: "documents", label: "Documents", icon: "▣", group: "PEOPLE" },
   {
     key: "appointments",
     label: "Appointments",
@@ -78,7 +73,7 @@ function GenericTable({ rows, columns }) {
 
         <tbody>
           {rows.map((row, index) => (
-            <tr key={row.id ?? row.document_id ?? index}>
+            <tr key={row.id ?? index}>
               {columns.map((column) => (
                 <td key={column.key}>
                   {column.render
@@ -108,7 +103,6 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState(null);
   const [doctors, setDoctors] = useState(null);
   const [patients, setPatients] = useState(null);
-  const [documents, setDocuments] = useState(null);
   const [appointments, setAppointments] = useState(null);
   const [auditLogs, setAuditLogs] = useState(null);
 
@@ -152,21 +146,14 @@ export default function AdminDashboard() {
         getAdminUsers(),
         getAdminDoctors(),
         getAdminPatients(),
-        getAdminDocuments(),
         getAdminAppointments(),
         getAdminAuditLogs(),
       ]);
 
       if (cancelled) return;
 
-      const [
-        usersResult,
-        doctorsResult,
-        patientsResult,
-        documentsResult,
-        appointmentsResult,
-        logsResult,
-      ] = results;
+      const [usersResult, doctorsResult, patientsResult, appointmentsResult, logsResult] =
+        results;
 
       const nextErrors = {};
 
@@ -186,12 +173,6 @@ export default function AdminDashboard() {
         setPatients(patientsResult.value);
       } else {
         nextErrors.patients = patientsResult.reason?.message;
-      }
-
-      if (documentsResult.status === "fulfilled") {
-        setDocuments(documentsResult.value);
-      } else {
-        nextErrors.documents = documentsResult.reason?.message;
       }
 
       if (appointmentsResult.status === "fulfilled") {
@@ -293,58 +274,6 @@ export default function AdminDashboard() {
     }
   }
 
-  function handleViewDocument(documentId) {
-    const token = localStorage.getItem("access_token");
-
-    if (!token) {
-      alert("Your session has expired. Please sign in again.");
-      return;
-    }
-
-    /*
-     * The backend requires the admin JWT.
-     * A normal window.open() cannot attach the Authorization header,
-     * so we create a temporary authenticated fetch and open the
-     * returned file as a Blob in a new tab.
-     */
-    fetch(
-      `${API_BASE_URL}/admin/documents/${documentId}/view`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    )
-      .then(async (response) => {
-        if (!response.ok) {
-          let message = "Unable to open document.";
-
-          try {
-            const data = await response.json();
-            message = data.detail || message;
-          } catch {
-            // Keep default message.
-          }
-
-          throw new Error(message);
-        }
-
-        return response.blob();
-      })
-      .then((blob) => {
-        const url = window.URL.createObjectURL(blob);
-        window.open(url, "_blank", "noopener,noreferrer");
-
-        setTimeout(() => {
-          window.URL.revokeObjectURL(url);
-        }, 60000);
-      })
-      .catch((error) => {
-        alert(error.message || "Unable to open document.");
-      });
-  }
-
   const links = [];
   let previousGroup = null;
 
@@ -369,10 +298,7 @@ export default function AdminDashboard() {
   const upcomingAppointments = (appointments || [])
     .filter((appointment) => {
       if (!appointment.appointment_date) return false;
-
-      return (
-        new Date(appointment.appointment_date) >= new Date()
-      );
+      return new Date(appointment.appointment_date) >= new Date();
     })
     .slice(0, 5);
 
@@ -390,41 +316,28 @@ export default function AdminDashboard() {
             <h1 className="page-title">
               {active === "dashboard"
                 ? "Admin Console"
-                : SECTIONS.find(
-                    (section) => section.key === active
-                  )?.label}
+                : SECTIONS.find((section) => section.key === active)?.label}
             </h1>
 
             <p className="page-subtitle">
-              Manage users, clinical staff, patients, documents,
-              appointments, and system activity.
+              Manage users, clinical staff, patients, appointments, and
+              system activity.
             </p>
           </div>
 
-          <span className="secure-badge">
-            Secure session
-          </span>
+          <span className="secure-badge">Secure session</span>
         </div>
 
-        {/* ================================================== */}
         {/* Dashboard */}
-        {/* ================================================== */}
-
         {active === "dashboard" && (
           <>
             <div className="welcome-banner">
               <div>
-                <div className="welcome-label">
-                  WORKSPACE OVERVIEW
-                </div>
-
-                <h2>
-                  Clinical administration at a glance
-                </h2>
-
+                <div className="welcome-label">WORKSPACE OVERVIEW</div>
+                <h2>Clinical administration at a glance</h2>
                 <p>
-                  Monitor the medical record workspace and manage
-                  clinical operations from one place.
+                  Monitor the medical record workspace and manage clinical
+                  operations from one place.
                 </p>
               </div>
 
@@ -433,67 +346,41 @@ export default function AdminDashboard() {
 
             <div className="stat-grid">
               <div className="card stat-card">
-                <div className="stat-label">
-                  Total Users
-                </div>
-
+                <div className="stat-label">Total Users</div>
                 <div className="stat-value">
-                  {loadingAll || errors.users
-                    ? "—"
-                    : users?.length ?? 0}
+                  {loadingAll || errors.users ? "—" : users?.length ?? 0}
                 </div>
-
-                <div className="stat-hint">
-                  Registered accounts
-                </div>
+                <div className="stat-hint">Registered accounts</div>
               </div>
 
               <div className="card stat-card">
-                <div className="stat-label">
-                  Doctors
-                </div>
-
+                <div className="stat-label">Doctors</div>
                 <div className="stat-value">
                   {loadingAll || errors.doctors
                     ? "—"
                     : doctors?.length ?? 0}
                 </div>
-
-                <div className="stat-hint">
-                  Clinical staff
-                </div>
+                <div className="stat-hint">Clinical staff</div>
               </div>
 
               <div className="card stat-card">
-                <div className="stat-label">
-                  Patients
-                </div>
-
+                <div className="stat-label">Patients</div>
                 <div className="stat-value">
                   {loadingAll || errors.patients
                     ? "—"
                     : patients?.length ?? 0}
                 </div>
-
-                <div className="stat-hint">
-                  Registered patients
-                </div>
+                <div className="stat-hint">Registered patients</div>
               </div>
 
               <div className="card stat-card">
-                <div className="stat-label">
-                  Documents
-                </div>
-
+                <div className="stat-label">Appointments</div>
                 <div className="stat-value">
-                  {loadingAll || errors.documents
+                  {loadingAll || errors.appointments
                     ? "—"
-                    : documents?.length ?? 0}
+                    : appointments?.length ?? 0}
                 </div>
-
-                <div className="stat-hint">
-                  Uploaded medical records
-                </div>
+                <div className="stat-hint">Scheduled records</div>
               </div>
             </div>
 
@@ -504,7 +391,6 @@ export default function AdminDashboard() {
                     <div className="section-heading">
                       Upcoming Appointments
                     </div>
-
                     <div className="section-description">
                       Scheduled clinical appointments
                     </div>
@@ -513,9 +399,7 @@ export default function AdminDashboard() {
                   <button
                     type="button"
                     className="text-button"
-                    onClick={() =>
-                      setActive("appointments")
-                    }
+                    onClick={() => setActive("appointments")}
                   >
                     View all →
                   </button>
@@ -524,45 +408,37 @@ export default function AdminDashboard() {
                 {loadingAll ? (
                   <Loading />
                 ) : errors.appointments ? (
-                  <ErrorBox
-                    message={errors.appointments}
-                  />
+                  <ErrorBox message={errors.appointments} />
                 ) : upcomingAppointments.length === 0 ? (
                   <div className="empty-state compact">
                     No upcoming appointments.
                   </div>
                 ) : (
                   <div>
-                    {upcomingAppointments.map(
-                      (appointment) => (
-                        <div
-                          className="dashboard-list-item"
-                          key={appointment.id}
-                        >
-                          <div className="dashboard-list-icon">
-                            □
-                          </div>
+                    {upcomingAppointments.map((appointment) => (
+                      <div
+                        className="dashboard-list-item"
+                        key={appointment.id}
+                      >
+                        <div className="dashboard-list-icon">□</div>
 
-                          <div className="dashboard-list-content">
-                            <strong>
-                              {appointment.patient_name ||
-                                `Patient #${appointment.patient_id}`}
-                            </strong>
+                        <div className="dashboard-list-content">
+                          <strong>
+                            {appointment.patient_name ||
+                              `Patient #${appointment.patient_id}`}
+                          </strong>
 
-                            <span>
-                              {appointment.doctor_name ||
-                                `Doctor #${appointment.doctor_id}`}
-                            </span>
-                          </div>
-
-                          <div className="dashboard-list-meta">
-                            {formatDate(
-                              appointment.appointment_date
-                            )}
-                          </div>
+                          <span>
+                            {appointment.doctor_name ||
+                              `Doctor #${appointment.doctor_id}`}
+                          </span>
                         </div>
-                      )
-                    )}
+
+                        <div className="dashboard-list-meta">
+                          {formatDate(appointment.appointment_date)}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -573,7 +449,6 @@ export default function AdminDashboard() {
                     <div className="section-heading">
                       Recent Activity
                     </div>
-
                     <div className="section-description">
                       Latest system audit events
                     </div>
@@ -582,9 +457,7 @@ export default function AdminDashboard() {
                   <button
                     type="button"
                     className="text-button"
-                    onClick={() =>
-                      setActive("audit-logs")
-                    }
+                    onClick={() => setActive("audit-logs")}
                   >
                     View logs →
                   </button>
@@ -593,9 +466,7 @@ export default function AdminDashboard() {
                 {loadingAll ? (
                   <Loading />
                 ) : errors.auditLogs ? (
-                  <ErrorBox
-                    message={errors.auditLogs}
-                  />
+                  <ErrorBox message={errors.auditLogs} />
                 ) : recentLogs.length === 0 ? (
                   <div className="empty-state compact">
                     No recent activity.
@@ -611,9 +482,7 @@ export default function AdminDashboard() {
 
                         <div>
                           <strong>
-                            {log.action ||
-                              log.event ||
-                              "System activity"}
+                            {log.action || log.event || "System activity"}
                           </strong>
 
                           <span>
@@ -626,8 +495,7 @@ export default function AdminDashboard() {
 
                         <time>
                           {formatDate(
-                            log.timestamp ||
-                              log.created_at
+                            log.timestamp || log.created_at
                           )}
                         </time>
                       </div>
@@ -639,18 +507,12 @@ export default function AdminDashboard() {
           </>
         )}
 
-        {/* ================================================== */}
         {/* Users */}
-        {/* ================================================== */}
-
         {active === "users" && (
           <div className="card card-padded">
             <div className="section-header-row">
               <div>
-                <div className="section-heading">
-                  All Users
-                </div>
-
+                <div className="section-heading">All Users</div>
                 <div className="section-description">
                   System accounts and assigned roles
                 </div>
@@ -670,21 +532,18 @@ export default function AdminDashboard() {
                 rows={users}
                 columns={[
                   {
-                    key: "id",
-                    label: "ID",
+                    key: "patient_id",
+                    label: "Patient ID",
+                    render: (row) =>
+                      row.id ?? row.patient_id ?? row.patient?.id ?? "—",
                   },
                   {
                     key: "name",
                     label: "Name",
                     render: (row) =>
-                      row.name ||
-                      row.full_name ||
-                      "—",
+                      row.name || row.full_name || "—",
                   },
-                  {
-                    key: "email",
-                    label: "Email",
-                  },
+                  { key: "email", label: "Email" },
                   {
                     key: "role",
                     label: "Role",
@@ -700,18 +559,12 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ================================================== */}
         {/* Doctors */}
-        {/* ================================================== */}
-
         {active === "doctors" && (
           <div className="card card-padded">
             <div className="section-header-row">
               <div>
-                <div className="section-heading">
-                  Doctors
-                </div>
-
+                <div className="section-heading">Doctors</div>
                 <div className="section-description">
                   Manage registered clinical staff
                 </div>
@@ -719,17 +572,12 @@ export default function AdminDashboard() {
 
               <ActionButton
                 onClick={() => {
-                  setShowCreateDoctor(
-                    (value) => !value
-                  );
-
+                  setShowCreateDoctor((value) => !value);
                   setDoctorCreateMessage("");
                   setDoctorCreateError("");
                 }}
               >
-                {showCreateDoctor
-                  ? "Cancel"
-                  : "+ Create Doctor"}
+                {showCreateDoctor ? "Cancel" : "+ Create Doctor"}
               </ActionButton>
             </div>
 
@@ -738,10 +586,9 @@ export default function AdminDashboard() {
                 <div className="form-panel-header">
                   <div>
                     <h3>Create Doctor</h3>
-
                     <p>
-                      Register a doctor and create their
-                      secure workspace account.
+                      Register a doctor and create their secure workspace
+                      account.
                     </p>
                   </div>
                 </div>
@@ -749,10 +596,7 @@ export default function AdminDashboard() {
                 <form onSubmit={handleCreateDoctor}>
                   <div className="form-grid">
                     <div className="field">
-                      <label htmlFor="doctor-name">
-                        Full Name
-                      </label>
-
+                      <label htmlFor="doctor-name">Full Name</label>
                       <input
                         id="doctor-name"
                         className="input"
@@ -770,10 +614,7 @@ export default function AdminDashboard() {
                     </div>
 
                     <div className="field">
-                      <label htmlFor="doctor-email">
-                        Email
-                      </label>
-
+                      <label htmlFor="doctor-email">Email</label>
                       <input
                         id="doctor-email"
                         className="input"
@@ -791,10 +632,7 @@ export default function AdminDashboard() {
                     </div>
 
                     <div className="field">
-                      <label htmlFor="doctor-password">
-                        Password
-                      </label>
-
+                      <label htmlFor="doctor-password">Password</label>
                       <input
                         id="doctor-password"
                         className="input"
@@ -804,8 +642,7 @@ export default function AdminDashboard() {
                         onChange={(event) =>
                           setDoctorForm({
                             ...doctorForm,
-                            password:
-                              event.target.value,
+                            password: event.target.value,
                           })
                         }
                         required
@@ -816,20 +653,16 @@ export default function AdminDashboard() {
                       <label htmlFor="doctor-specialization">
                         Specialization
                       </label>
-
                       <input
                         id="doctor-specialization"
                         className="input"
                         type="text"
                         placeholder="e.g. Cardiology"
-                        value={
-                          doctorForm.specialization
-                        }
+                        value={doctorForm.specialization}
                         onChange={(event) =>
                           setDoctorForm({
                             ...doctorForm,
-                            specialization:
-                              event.target.value,
+                            specialization: event.target.value,
                           })
                         }
                         required
@@ -852,9 +685,7 @@ export default function AdminDashboard() {
                   <button
                     type="submit"
                     className="btn btn-primary"
-                    disabled={
-                      doctorCreateLoading
-                    }
+                    disabled={doctorCreateLoading}
                   >
                     {doctorCreateLoading
                       ? "Creating..."
@@ -867,29 +698,24 @@ export default function AdminDashboard() {
             {loadingAll ? (
               <Loading />
             ) : errors.doctors ? (
-              <ErrorBox
-                message={errors.doctors}
-              />
+              <ErrorBox message={errors.doctors} />
             ) : (
               <GenericTable
                 rows={doctors}
                 columns={[
                   {
-                    key: "id",
-                    label: "ID",
+                    key: "patient_id",
+                    label: "Patient ID",
+                    render: (row) =>
+                      row.id ?? row.patient_id ?? row.patient?.id ?? "—",
                   },
                   {
                     key: "name",
                     label: "Name",
                     render: (row) =>
-                      row.name ||
-                      row.full_name ||
-                      "—",
+                      row.name || row.full_name || "—",
                   },
-                  {
-                    key: "email",
-                    label: "Email",
-                  },
+                  { key: "email", label: "Email" },
                   {
                     key: "specialty",
                     label: "Specialization",
@@ -905,18 +731,12 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ================================================== */}
         {/* Patients */}
-        {/* ================================================== */}
-
         {active === "patients" && (
           <div className="card card-padded">
             <div className="section-header-row">
               <div>
-                <div className="section-heading">
-                  Patients
-                </div>
-
+                <div className="section-heading">Patients</div>
                 <div className="section-description">
                   Manage registered patient accounts
                 </div>
@@ -924,17 +744,12 @@ export default function AdminDashboard() {
 
               <ActionButton
                 onClick={() => {
-                  setShowCreatePatient(
-                    (value) => !value
-                  );
-
+                  setShowCreatePatient((value) => !value);
                   setPatientCreateMessage("");
                   setPatientCreateError("");
                 }}
               >
-                {showCreatePatient
-                  ? "Cancel"
-                  : "+ Create Patient"}
+                {showCreatePatient ? "Cancel" : "+ Create Patient"}
               </ActionButton>
             </div>
 
@@ -943,10 +758,9 @@ export default function AdminDashboard() {
                 <div className="form-panel-header">
                   <div>
                     <h3>Create Patient</h3>
-
                     <p>
-                      Register a patient account for
-                      clinical administration.
+                      Register a patient account for clinical
+                      administration.
                     </p>
                   </div>
                 </div>
@@ -954,10 +768,7 @@ export default function AdminDashboard() {
                 <form onSubmit={handleCreatePatient}>
                   <div className="form-grid">
                     <div className="field">
-                      <label htmlFor="patient-name">
-                        Full Name
-                      </label>
-
+                      <label htmlFor="patient-name">Full Name</label>
                       <input
                         id="patient-name"
                         className="input"
@@ -975,10 +786,7 @@ export default function AdminDashboard() {
                     </div>
 
                     <div className="field">
-                      <label htmlFor="patient-email">
-                        Email
-                      </label>
-
+                      <label htmlFor="patient-email">Email</label>
                       <input
                         id="patient-email"
                         className="input"
@@ -988,8 +796,7 @@ export default function AdminDashboard() {
                         onChange={(event) =>
                           setPatientForm({
                             ...patientForm,
-                            email:
-                              event.target.value,
+                            email: event.target.value,
                           })
                         }
                         required
@@ -1000,7 +807,6 @@ export default function AdminDashboard() {
                       <label htmlFor="patient-password">
                         Password
                       </label>
-
                       <input
                         id="patient-password"
                         className="input"
@@ -1010,8 +816,7 @@ export default function AdminDashboard() {
                         onChange={(event) =>
                           setPatientForm({
                             ...patientForm,
-                            password:
-                              event.target.value,
+                            password: event.target.value,
                           })
                         }
                         required
@@ -1022,29 +827,22 @@ export default function AdminDashboard() {
                       <label htmlFor="patient-dob">
                         Date of Birth
                       </label>
-
                       <input
                         id="patient-dob"
                         className="input"
                         type="date"
-                        value={
-                          patientForm.date_of_birth
-                        }
+                        value={patientForm.date_of_birth}
                         onChange={(event) =>
                           setPatientForm({
                             ...patientForm,
-                            date_of_birth:
-                              event.target.value,
+                            date_of_birth: event.target.value,
                           })
                         }
                       />
                     </div>
 
                     <div className="field">
-                      <label htmlFor="patient-gender">
-                        Gender
-                      </label>
-
+                      <label htmlFor="patient-gender">Gender</label>
                       <select
                         id="patient-gender"
                         className="input"
@@ -1052,26 +850,14 @@ export default function AdminDashboard() {
                         onChange={(event) =>
                           setPatientForm({
                             ...patientForm,
-                            gender:
-                              event.target.value,
+                            gender: event.target.value,
                           })
                         }
                       >
-                        <option value="">
-                          Select gender
-                        </option>
-
-                        <option value="Male">
-                          Male
-                        </option>
-
-                        <option value="Female">
-                          Female
-                        </option>
-
-                        <option value="Other">
-                          Other
-                        </option>
+                        <option value="">Select gender</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
                       </select>
                     </div>
                   </div>
@@ -1091,9 +877,7 @@ export default function AdminDashboard() {
                   <button
                     type="submit"
                     className="btn btn-primary"
-                    disabled={
-                      patientCreateLoading
-                    }
+                    disabled={patientCreateLoading}
                   >
                     {patientCreateLoading
                       ? "Creating..."
@@ -1106,37 +890,30 @@ export default function AdminDashboard() {
             {loadingAll ? (
               <Loading />
             ) : errors.patients ? (
-              <ErrorBox
-                message={errors.patients}
-              />
+              <ErrorBox message={errors.patients} />
             ) : (
               <GenericTable
                 rows={patients}
                 columns={[
                   {
-                    key: "id",
-                    label: "ID",
+                    key: "patient_id",
+                    label: "Patient ID",
+                    render: (row) =>
+                      row.id ?? row.patient_id ?? row.patient?.id ?? "—",
                   },
                   {
                     key: "name",
                     label: "Name",
                     render: (row) =>
-                      row.name ||
-                      row.full_name ||
-                      "—",
+                      row.name || row.full_name || "—",
                   },
-                  {
-                    key: "email",
-                    label: "Email",
-                  },
+                  { key: "email", label: "Email" },
                   {
                     key: "age",
                     label: "Age / Sex",
                     render: (row) =>
                       `${row.age ?? "—"} / ${
-                        row.sex ||
-                        row.gender ||
-                        "—"
+                        row.sex || row.gender || "—"
                       }`,
                   },
                 ]}
@@ -1145,123 +922,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ================================================== */}
-        {/* Documents */}
-        {/* ================================================== */}
-
-        {active === "documents" && (
-          <div className="card card-padded">
-            <div className="section-header-row">
-              <div>
-                <div className="section-heading">
-                  Uploaded Documents
-                </div>
-
-                <div className="section-description">
-                  View documents uploaded by patients
-                </div>
-              </div>
-
-              <span className="count-badge">
-                {documents?.length ?? 0} documents
-              </span>
-            </div>
-
-            {loadingAll ? (
-              <Loading />
-            ) : errors.documents ? (
-              <ErrorBox
-                message={errors.documents}
-              />
-            ) : (
-              <GenericTable
-                rows={documents}
-                columns={[
-                  {
-                    key: "file_name",
-                    label: "Document",
-                    render: (row) => (
-                      <div>
-                        <strong>
-                          {row.file_name || "Unnamed document"}
-                        </strong>
-
-                        <div
-                          style={{
-                            fontSize: "12px",
-                            color: "var(--color-text-muted)",
-                            marginTop: "4px",
-                          }}
-                        >
-                          {row.document_type ||
-                            row.file_type ||
-                            "Medical document"}
-                        </div>
-                      </div>
-                    ),
-                  },
-                  {
-                    key: "patient_name",
-                    label: "Patient",
-                    render: (row) =>
-                      row.patient_name ||
-                      `Patient #${row.patient_id}`,
-                  },
-                  {
-                    key: "extraction_method",
-                    label: "Extraction",
-                    render: (row) => (
-                      <span className="badge badge-neutral">
-                        {row.extraction_method ||
-                          "—"}
-                      </span>
-                    ),
-                  },
-                  {
-                    key: "processing_status",
-                    label: "Status",
-                    render: (row) => (
-                      <span className="badge badge-accent">
-                        {row.processing_status ||
-                          "—"}
-                      </span>
-                    ),
-                  },
-                  {
-                    key: "uploaded_at",
-                    label: "Uploaded",
-                    render: (row) =>
-                      formatDate(
-                        row.uploaded_at
-                      ),
-                  },
-                  {
-                    key: "actions",
-                    label: "Action",
-                    render: (row) => (
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        onClick={() =>
-                          handleViewDocument(
-                            row.document_id
-                          )
-                        }
-                      >
-                        View Document
-                      </button>
-                    ),
-                  },
-                ]}
-              />
-            )}
-          </div>
-        )}
-
-        {/* ================================================== */}
         {/* Appointments */}
-        {/* ================================================== */}
-
         {active === "appointments" && (
           <div className="card card-padded">
             <div className="section-header-row">
@@ -1269,7 +930,6 @@ export default function AdminDashboard() {
                 <div className="section-heading">
                   Appointments
                 </div>
-
                 <div className="section-description">
                   Patient and doctor scheduling
                 </div>
@@ -1283,38 +943,29 @@ export default function AdminDashboard() {
             {loadingAll ? (
               <Loading />
             ) : errors.appointments ? (
-              <ErrorBox
-                message={errors.appointments}
-              />
+              <ErrorBox message={errors.appointments} />
             ) : (
               <GenericTable
                 rows={appointments}
                 columns={[
-                  {
-                    key: "id",
-                    label: "ID",
-                  },
+                  { key: "id", label: "ID" },
                   {
                     key: "patient_name",
                     label: "Patient",
                     render: (row) =>
-                      row.patient_name ||
-                      row.patient_id,
+                      row.patient_name || row.patient_id,
                   },
                   {
                     key: "doctor_name",
                     label: "Doctor",
                     render: (row) =>
-                      row.doctor_name ||
-                      row.doctor_id,
+                      row.doctor_name || row.doctor_id,
                   },
                   {
                     key: "appointment_date",
                     label: "Date / Time",
                     render: (row) =>
-                      formatDate(
-                        row.appointment_date
-                      ),
+                      formatDate(row.appointment_date),
                   },
                   {
                     key: "status",
@@ -1331,10 +982,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ================================================== */}
         {/* Audit Logs */}
-        {/* ================================================== */}
-
         {active === "audit-logs" && (
           <div className="card card-padded">
             <div className="section-header-row">
@@ -1342,7 +990,6 @@ export default function AdminDashboard() {
                 <div className="section-heading">
                   Audit Logs
                 </div>
-
                 <div className="section-description">
                   Security and system activity history
                 </div>
@@ -1356,54 +1003,44 @@ export default function AdminDashboard() {
             {loadingAll ? (
               <Loading />
             ) : errors.auditLogs ? (
-              <ErrorBox
-                message={errors.auditLogs}
-              />
+              <ErrorBox message={errors.auditLogs} />
             ) : (
               <GenericTable
-  rows={auditLogs}
-  columns={[
-    {
-      key: "actor",
-      label: "Actor",
-      render: (row) => (
-        <strong>
-          {row.actor || "System"}
-        </strong>
-      ),
-    },
-    {
-      key: "action",
-      label: "Action",
-      render: (row) => (
-        <span className="badge badge-neutral">
-          {row.action || "—"}
-        </span>
-      ),
-    },
-    {
-      key: "resource",
-      label: "Resource",
-      render: (row) => {
-        if (!row.resource_type) {
-          return "—";
-        }
-
-        const resourceName =
-          row.resource_type.charAt(0).toUpperCase() +
-          row.resource_type.slice(1);
-
-        return `${resourceName} #${row.resource_id ?? "—"}`;
-      },
-    },
-    {
-      key: "timestamp",
-      label: "Timestamp",
-      render: (row) =>
-        formatDate(row.created_at),
-    },
-  ]}
-/>
+                rows={auditLogs}
+                columns={[
+                  {
+                    key: "actor",
+                    label: "Actor",
+                    render: (row) =>
+                      row.actor ||
+                      row.user ||
+                      row.performed_by ||
+                      "—",
+                  },
+                  {
+                    key: "action",
+                    label: "Action",
+                    render: (row) =>
+                      row.action || row.event || "—",
+                  },
+                  {
+                    key: "details",
+                    label: "Details",
+                    render: (row) =>
+                      row.details ||
+                      row.description ||
+                      "—",
+                  },
+                  {
+                    key: "timestamp",
+                    label: "Timestamp",
+                    render: (row) =>
+                      formatDate(
+                        row.timestamp || row.created_at
+                      ),
+                  },
+                ]}
+              />
             )}
           </div>
         )}

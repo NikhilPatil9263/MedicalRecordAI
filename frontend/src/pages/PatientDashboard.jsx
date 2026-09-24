@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import Sidebar from "../components/Sidebar.jsx";
+import PatientDoctorChat from "../components/PatientDoctorChat.jsx";
 import {
   getPatientDocuments,
   uploadPatientDocument,
   viewPatientDocument,
+  getPatientAppointments,
 } from "../services/api";
 
 function statusBadge(status) {
@@ -79,6 +81,10 @@ export default function PatientDashboard() {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState("");
+  const [chatAppointments, setChatAppointments] = useState([]);
+  const [selectedChatAppointment, setSelectedChatAppointment] = useState(null);
+  const [chatAppointmentsLoading, setChatAppointmentsLoading] = useState(false);
+  const [chatAppointmentsError, setChatAppointmentsError] = useState("");
 
   const fileInputRef = useRef(null);
 
@@ -133,6 +139,34 @@ export default function PatientDashboard() {
     }
   }
 
+  async function loadChatAppointments() {
+    setChatAppointmentsLoading(true);
+    setChatAppointmentsError("");
+
+    try {
+      const data = await getPatientAppointments();
+      const items = Array.isArray(data) ? data : [];
+      setChatAppointments(items);
+      setSelectedChatAppointment((current) =>
+        current && items.some((item) => item.id === current.id)
+          ? current
+          : items[0] || null
+      );
+    } catch (error) {
+      setChatAppointmentsError(
+        error?.message || "Unable to load appointments."
+      );
+    } finally {
+      setChatAppointmentsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (activeSection === "chat") {
+      loadChatAppointments();
+    }
+  }, [activeSection]);
+
   const processedDocuments = documents.filter((document) => {
     const status = documentStatus(document).toLowerCase();
     return status === "processed" || status === "completed";
@@ -158,6 +192,12 @@ export default function PatientDashboard() {
       icon: "◷",
       active: activeSection === "appointments",
       onClick: () => setActiveSection("appointments"),
+    },
+    {
+      label: "Chat with Doctor",
+      icon: "◉",
+      active: activeSection === "chat",
+      onClick: () => setActiveSection("chat"),
     },
   ];
 
@@ -401,6 +441,66 @@ export default function PatientDashboard() {
                   ))}
                 </div>
               )}
+            </div>
+          </>
+        )}
+
+        {activeSection === "chat" && (
+          <>
+            <div className="topbar patient-topbar">
+              <div>
+                <div className="page-eyebrow">SECURE MESSAGING</div>
+                <h1 className="page-title">Chat with your doctor</h1>
+                <p className="page-subtitle">
+                  Communicate directly with the doctor assigned to your appointment.
+                </p>
+              </div>
+              <span className="secure-badge">Private chat</span>
+            </div>
+
+            {chatAppointmentsError && (
+              <div className="redesign-error">{chatAppointmentsError}</div>
+            )}
+
+            <div className="live-chat-layout">
+              <aside className="live-chat-appointments">
+                <div className="live-chat-list-title">Your appointments</div>
+                <div className="live-chat-list-subtitle">Select an appointment to message your doctor.</div>
+
+                {chatAppointmentsLoading ? (
+                  <div className="live-chat-list-empty">Loading appointments...</div>
+                ) : chatAppointments.length === 0 ? (
+                  <div className="live-chat-list-empty">No appointments available for chat.</div>
+                ) : (
+                  chatAppointments.map((appointment) => (
+                    <button
+                      type="button"
+                      key={appointment.id}
+                      className={`live-chat-appointment ${
+                        selectedChatAppointment?.id === appointment.id ? "active" : ""
+                      }`}
+                      onClick={() => setSelectedChatAppointment(appointment)}
+                    >
+                      <span className="live-chat-list-avatar">DR</span>
+                      <span>
+                        <strong>Doctor</strong>
+                        <small>Appointment #{appointment.id}</small>
+                      </span>
+                    </button>
+                  ))
+                )}
+              </aside>
+
+              <PatientDoctorChat
+                appointmentId={selectedChatAppointment?.id}
+                currentRole="patient"
+                peerName="Assigned Doctor"
+                appointmentLabel={
+                  selectedChatAppointment
+                    ? `Appointment #${selectedChatAppointment.id}`
+                    : undefined
+                }
+              />
             </div>
           </>
         )}

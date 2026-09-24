@@ -9,6 +9,7 @@ from fastapi import (
 from fastapi.responses import FileResponse
 
 from pydantic import BaseModel
+from sqlalchemy.orm import aliased
 
 from app.auth.dependencies import get_current_user
 from app.auth.security import hash_password
@@ -461,6 +462,10 @@ def create_appointment(
         db.close()
 
 
+PatientUser = aliased(User)
+DoctorUser = aliased(User)
+
+
 @router.get("/appointments")
 def get_appointments(
     current_user: User = Depends(require_admin)
@@ -470,7 +475,26 @@ def get_appointments(
     try:
 
         appointments = (
-            db.query(Appointment)
+            db.query(Appointment, Patient, PatientUser, Doctor, DoctorUser)
+            .join(
+                Patient,
+                Appointment.patient_id == Patient.id
+            )
+            .join(
+                PatientUser,
+                Patient.user_id == PatientUser.id
+            )
+            .join(
+                Doctor,
+                Appointment.doctor_id == Doctor.id
+            )
+            .join(
+                DoctorUser,
+                Doctor.user_id == DoctorUser.id
+            )
+            .order_by(
+                Appointment.appointment_date.asc()
+            )
             .all()
         )
 
@@ -478,11 +502,19 @@ def get_appointments(
             {
                 "appointment_id": appointment.id,
                 "patient_id": appointment.patient_id,
+                "patient_name": patient_user.name,
                 "doctor_id": appointment.doctor_id,
+                "doctor_name": doctor_user.name,
                 "appointment_date": appointment.appointment_date,
                 "status": appointment.status,
             }
-            for appointment in appointments
+            for (
+                appointment,
+                patient,
+                patient_user,
+                doctor,
+                doctor_user,
+            ) in appointments
         ]
 
     finally:

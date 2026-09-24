@@ -4,7 +4,6 @@ from app.ingestion.document_extractor import (
     extract_document_text,
     extract_patient_names,
 )
-
 from app.ingestion.vlm_extractor import extract_with_vlm
 from app.ingestion.normalizer import normalize_vlm_output
 
@@ -20,10 +19,36 @@ def process_document(
     patient_name: str,
     document_id: int,
 ) -> dict:
+    """
+    Process an uploaded medical document.
 
-    # ==========================================
-    # Extract Document
-    # ==========================================
+    Pipeline:
+
+        Document
+            ↓
+        Document extraction
+            ↓
+        ┌───────────────────────┐
+        │                       │
+        │ TEXT_EXTRACTION       │
+        │                       │
+        │ VLM_REQUIRED          │
+        │                       │
+        └───────────────────────┘
+            ↓
+        Validation
+            ↓
+        Structured persistence / Vector DB
+            ↓
+        Return processing result
+
+    The caller is responsible for updating the Document
+    processing_status after this function succeeds.
+    """
+
+    # ========================================================
+    # Initial document extraction
+    # ========================================================
 
     text, method = extract_document_text(
         file_path
@@ -33,25 +58,24 @@ def process_document(
         file_path
     )
 
-    # ==========================================
-    # Native Text PDF
-    # ==========================================
+    # ========================================================
+    # TEXT EXTRACTION
+    # ========================================================
 
     if method == "TEXT_EXTRACTION":
 
-        # Extract all patient names from PDF
+        # ----------------------------------------------------
+        # Validate patient identity from extracted text
+        # ----------------------------------------------------
+
         document_patient_names = extract_patient_names(
             text
         )
 
-        # ==========================================
-        # Patient Identity Validation
-        # ==========================================
-
         if len(document_patient_names) == 0:
             raise ValueError(
-                "Could not identify the patient in "
-                "the medical document."
+                "Could not identify the patient "
+                "in the medical document."
             )
 
         if len(document_patient_names) > 1:
@@ -65,6 +89,10 @@ def process_document(
             document_patient_names[0]
         )
 
+        # ----------------------------------------------------
+        # Verify uploaded document belongs to patient
+        # ----------------------------------------------------
+
         if (
             patient_name
             and document_patient_name.strip().lower()
@@ -75,9 +103,9 @@ def process_document(
                 "the authenticated patient."
             )
 
-        # ==========================================
-        # Store in ChromaDB
-        # ==========================================
+        # ----------------------------------------------------
+        # Store searchable text in vector database
+        # ----------------------------------------------------
 
         add_medical_record(
             medical_record_text=text,
@@ -94,24 +122,32 @@ def process_document(
             "structured_data": None,
         }
 
-    # ==========================================
-    # Scanned PDF / Image → Gemini VLM
-    # ==========================================
+    # ========================================================
+    # VLM EXTRACTION
+    # ========================================================
 
     if method == "VLM_REQUIRED":
+
+        # ----------------------------------------------------
+        # Extract structured medical information
+        # ----------------------------------------------------
 
         raw_vlm_data = extract_with_vlm(
             file_path
         )
+
+        # ----------------------------------------------------
+        # Normalize VLM output into application schema
+        # ----------------------------------------------------
 
         medical_record = normalize_vlm_output(
             data=raw_vlm_data,
             file_name=file_name,
         )
 
-        # ==========================================
-        # Patient Identity Validation
-        # ==========================================
+        # ----------------------------------------------------
+        # Validate patient identity
+        # ----------------------------------------------------
 
         document_patient_name = (
             medical_record
@@ -121,8 +157,7 @@ def process_document(
         ).strip().lower()
 
         authenticated_patient_name = (
-            patient_name
-            or ""
+            patient_name or ""
         ).strip().lower()
 
         if (
@@ -136,17 +171,17 @@ def process_document(
                 "the authenticated patient."
             )
 
-        # ==========================================
-        # Convert Structured Record to Searchable Text
-        # ==========================================
+        # ----------------------------------------------------
+        # Convert structured record into searchable text
+        # ----------------------------------------------------
 
         searchable_text = medical_record_to_text(
             medical_record
         )
 
-        # ==========================================
-        # Save Structured Data to PostgreSQL
-        # ==========================================
+        # ----------------------------------------------------
+        # Persist structured medical record
+        # ----------------------------------------------------
 
         save_medical_record(
             medical_record=medical_record,
@@ -154,9 +189,9 @@ def process_document(
             patient_id=patient_id,
         )
 
-        # ==========================================
-        # Store Searchable Data in ChromaDB
-        # ==========================================
+        # ----------------------------------------------------
+        # Store searchable representation in vector DB
+        # ----------------------------------------------------
 
         add_medical_record(
             medical_record_text=searchable_text,
@@ -173,10 +208,10 @@ def process_document(
             "structured_data": medical_record,
         }
 
-    # ==========================================
-    # Unsupported Document
-    # ==========================================
+    # ========================================================
+    # Unsupported extraction method
+    # ========================================================
 
     raise ValueError(
-        "Unsupported document type"
+        f"Unsupported document processing method: {method}"
     )

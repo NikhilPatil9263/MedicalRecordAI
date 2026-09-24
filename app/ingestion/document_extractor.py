@@ -35,7 +35,7 @@ def extract_patient_names(text: str) -> list[str]:
     one patient.
     """
 
-    pattern = r"Patient\s*\n([A-Za-z][A-Za-z .'-]+)"
+    pattern = r"Patient\s+Name\s*[:\-]?\s*([A-Za-z][A-Za-z .'-]+)"
 
     matches = re.findall(
         pattern,
